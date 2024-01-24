@@ -1,55 +1,80 @@
-from scapy.all import rdpcap, wrpcap
+import os
+from scapy.all import rdpcap, wrpcap, Dot11
 from colorama import Fore, Style
 import random
 
 def generate_colored_logo():
     colors = [Fore.RED, Fore.GREEN, Fore.YELLOW, Fore.BLUE, Fore.MAGENTA, Fore.CYAN, Fore.WHITE]
     selected_color = random.choice(colors)
+    author_name = "By Subhankar"
     logo = f"""
-    {selected_color}  _______ _                 _     _______ _           _             {Style.RESET_ALL}
-    {selected_color} |__   __| |               | |   |__   __| |         | |            {Style.RESET_ALL}
-    {selected_color}    | |  | |__   __ _ _ __ | | __   | |  | |__   __ _| |_ ___  ___ {Style.RESET_ALL}
-    {selected_color}    | |  | '_ \ / _` | '_ \| |/ /   | |  | '_ \ / _` | __/ _ \/ __|{Style.RESET_ALL}
-    {selected_color}    | |  | | | | (_| | | | |   <    | |  | | | | (_| | ||  __/\__ \\{Style.RESET_ALL}
-    {selected_color}    |_|  |_| |_|\__,_|_| |_|_|\_\   |_|  |_| |_|\__,_|\__\___||___/{Style.RESET_ALL}
+    {selected_color}
+  _    _                 _     _           _          ______      _                  _               {author_name}
+ | |  | |               | |   | |         | |        |  ____|    | |                | |           
+ | |__| | __ _ _ __   __| |___| |__   __ _| | _____  | |__  __  _| |_ _ __ __ _  ___| |_ ___ _ __ 
+ |  __  |/ _` | '_ \ / _` / __| '_ \ / _` | |/ / _ \ |  __| \ \/ | __| '__/ _` |/ __| __/ _ | '__|
+ | |  | | (_| | | | | (_| \__ | | | | (_| |   |  __/ | |____ >  <| |_| | | (_| | (__| ||  __| |   
+ |_|  |_|\__,_|_| |_|\__,_|___|_| |_|\__,_|_|\_\___| |______/_/\_\\__|_|  \__,_|\___|\__\___|_|   
+    {Style.RESET_ALL}
     """
     return logo
 
-def reduce_and_extract(input_path, output_path):
-    # Read and parse the input file
-    try:
-        packets = rdpcap(input_path)
-    except FileNotFoundError:
-        print(f"Error: File '{input_path}' not found.")
-        return
-    except Exception as e:
-        print(f"Error: {e}")
-        return
+def reduce_and_extract(input_paths, output_folder):
+    for input_path in input_paths:
+        # Read and parse the input file
+        try:
+            packets = rdpcap(input_path)
+        except FileNotFoundError:
+            print(f"Error: File '{input_path}' not found.")
+            continue
+        except Exception as e:
+            print(f"Error: {e}")
+            continue
 
-    # Filter WiFi packets
-    wifi_packets = [pkt for pkt in packets if pkt.haslayer("Dot11")]
+        # Filter WiFi packets for WEP, WPA, and WPA2
+        wep_packets = [pkt for pkt in packets if pkt.haslayer(Dot11) and pkt[Dot11].type == 2]  # WEP
+        wpa_packets = [pkt for pkt in packets if pkt.haslayer(Dot11) and pkt[Dot11].type == 2 and pkt[Dot11].subtype == 8]  # WPA
+        wpa2_handshakes = [pkt for pkt in packets if pkt.haslayer(Dot11) and pkt[Dot11].type == 2 and pkt[Dot11].subtype == 8 and pkt.haslayer("EAPOL")]  # WPA2
 
-    # Extract WPA2 handshakes
-    wpa2_handshakes = [pkt for pkt in wifi_packets if pkt.haslayer("EAPOL")]
+        if not any([wep_packets, wpa_packets, wpa2_handshakes]):
+            print(f"No WEP, WPA, or WPA2 handshakes found in the file: {input_path}")
+            continue
 
-    if not wpa2_handshakes:
-        print("No WPA2 handshakes found in the provided file.")
-        return
+        # Create handshake folder if it doesn't exist
+        if not os.path.exists(output_folder):
+            os.makedirs(output_folder)
 
-    # Write to a new file
-    try:
-        wrpcap(output_path, wpa2_handshakes)
-        print(f"Extracted WPA2 handshakes saved to '{output_path}'.")
-    except Exception as e:
-        print(f"Error while writing to file: {e}")
+        # Construct the output file path
+        output_file = os.path.join(output_folder, f"extracted_handshakes_{os.path.splitext(os.path.basename(input_path))[0]}.cap")
+
+        # Write to a new file
+        try:
+            # Combine all types of handshakes
+            all_handshakes = wep_packets + wpa_packets + wpa2_handshakes
+            wrpcap(output_file, all_handshakes)
+            print(f"Extracted handshakes from '{input_path}' saved to '{output_file}'.")
+        except Exception as e:
+            print(f"Error while writing to file: {e}")
 
 if __name__ == "__main__":
-    # Print the dynamically colored ASCII art logo
+    # Print the dynamically colored ASCII art logo with author name
     print(generate_colored_logo())
 
-    # Get user input for input and output paths
-    input_file = input("Enter the path to the input .cap or .pcap file: ").strip()
-    output_file = input("Enter the path for the output file (e.g., extracted_handshakes.cap): ").strip()
+    # Continuously prompt for input files and extract handshakes
+    input_files = []
+    while True:
+        # Get user input for input file
+        input_file = input("Enter the path to the input .cap or .pcap file (or type 'exit' to end): ").strip()
+
+        # Check if the user wants to exit
+        if input_file.lower() == 'exit':
+            print("Exiting the script. Goodbye!")
+            break
+
+        input_files.append(input_file)
+
+    # Get user input for output folder
+    output_folder = "handshake"
 
     # Call the function with user-provided input
-    reduce_and_extract(input_file, output_file)
+    reduce_and_extract(input_files, output_folder)
