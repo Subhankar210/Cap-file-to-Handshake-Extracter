@@ -15,7 +15,7 @@ This Python script is designed to reduce the size of a .cap or .pcap file and ex
 
 1. **Requirements:**
    - Python 3.x
-   - Install required library using: `pip install scapy`
+   - Install required library using: `pip install scapy` & also 'pip install colorama'
 
 2. **Run the Script:**
    - Open a terminal or command prompt.
